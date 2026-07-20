@@ -1,10 +1,6 @@
 // 查卡核心邏輯。bot 和 CLI 共用。
 // CLI 測試: node search.mjs 米奇
-import { DatabaseSync } from 'node:sqlite';
-import { fileURLToPath } from 'node:url';
-
-const dbPath = fileURLToPath(new URL('./data/lorcana.db', import.meta.url));
-const db = new DatabaseSync(dbPath, { readOnly: true });
+import { db } from './db.mjs';
 
 // 卡號樣式: 1-001 / 1-P1-001 / Q1-007，也接受 1-1 這種沒補零的寫法
 const CARD_NO_RE = /^([0-9]{1,2}|Q[12])(?:-(P[1-4]|C[12]|D23|PD1))?-([0-9]{1,3})([a-e])?$/i;
