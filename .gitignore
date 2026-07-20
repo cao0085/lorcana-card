@@ -1,0 +1,12 @@
+# 下載的原始資料與產生的資料庫，都可由指令重建，不進版控
+data/allCards.en.json
+data/lorcana.db
+data/lorcana.db-shm
+data/lorcana.db-wal
+
+# 翻譯成果請匯出到 translations/ 並進版控 (見 README「翻譯資料的保存」)
+# translations/ 不要 ignore
+
+node_modules/
+.env
+.env.local
