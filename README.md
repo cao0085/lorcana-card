@@ -29,16 +29,64 @@ node search.mjs 米奇       # CLI 測試查詢
 
 `import.mjs` 可重複執行：英文資料會 upsert 覆蓋，**翻譯不受影響**。
 
+### 跑 Bot
+
+```bash
+cp .env.example .env      # 填入 LINE 憑證
+node --env-file=.env server.mjs
+```
+
+沒有憑證也能測（dry-run 不會呼叫真正的 LINE API，只印出要送的訊息）：
+
+```bash
+# 終端機 1
+DRY_RUN=1 LINE_CHANNEL_SECRET=testsecret LINE_CHANNEL_ACCESS_TOKEN=x node server.mjs
+
+# 終端機 2
+LINE_CHANNEL_SECRET=testsecret node test-webhook.mjs 1-001
+LINE_CHANNEL_SECRET=testsecret node test-webhook.mjs 真人
+```
+
+健康檢查：`curl localhost:3000/healthz`
+（回傳卡片數、憑證是否設定、本月已用推播則數）
+
+---
+
+## Bot 行為
+
+| 輸入 | 行為 |
+|---|---|
+| 卡號（`1-001`、`1-P1-001`） | 精確查詢，回 Flex 卡片 |
+| 關鍵字（`Elsa`） | 模糊查詢；多筆結果回 Carousel（最多 12 張） |
+| `說明` / `help` / `?` | 使用說明 |
+| `真人` / `人工` / `客服` | 轉人工，bot 停止回應該使用者 |
+
+轉人工後逾時（預設 30 分鐘）無人處理會**自動恢復自動回覆**，
+避免使用者被永久卡住沒人理。
+
+### 翻譯的接入方式
+
+`format.mjs` 內所有文字都經過 `zhOr(中文, 英文)` 取值。
+**把 `card_zh` 填滿後顯示會自動變中文，`format.mjs` 不需要改。**
+
+`card_zh.status` 也已接上顯示：`machine` 會標註「※ 機器翻譯，尚未校對」，
+`pending` 會標註「※ 此卡尚未翻譯」，避免使用者誤信機翻內容。
+
 ---
 
 ## 檔案
 
 | 檔案 | 用途 |
 |---|---|
-| `fetch-cards.mjs` | 從 LorcanaJSON 下載英文卡牌資料，並印出欄位統計 |
 | `schema.sql` | 資料庫結構（卡牌／翻譯／術語／全文索引／使用者／訊息） |
+| `fetch-cards.mjs` | 從 LorcanaJSON 下載英文卡牌資料，並印出欄位統計 |
 | `import.mjs` | 建立 schema、匯入卡牌、重建 FTS 索引 |
-| `search.mjs` | 查卡核心邏輯，bot 與 CLI 共用；export `search()` 與 `normalizeCardNo()` |
+| `db.mjs` | 共用的 SQLite 連線 |
+| `search.mjs` | 查卡核心邏輯；export `search()` 與 `normalizeCardNo()` |
+| `format.mjs` | 查詢結果 → LINE 訊息（Flex／純文字），**中英 fallback 在這裡** |
+| `line.mjs` | LINE API：簽章驗證、reply／push、推播額度統計 |
+| `server.mjs` | Webhook 伺服器 |
+| `test-webhook.mjs` | 本機模擬 LINE 請求（含正確簽章），無憑證也能測 |
 
 ---
 
@@ -204,10 +252,13 @@ LINE 官方帳號方案（台灣）：
 - [ ] 人工校對，狀態改 `reviewed`
 
 ### Phase 2 — Bot
-- [ ] LINE Messaging API Channel、取得 Secret／Token
-- [ ] Webhook 伺服器 + 簽章驗證
-- [ ] Flex Message 卡片版面、多筆結果用 Carousel
-- [ ] `users` / `messages` 寫入
+- [x] Webhook 伺服器 + 簽章驗證
+- [x] Flex Message 卡片版面、多筆結果用 Carousel
+- [x] `users` / `messages` 寫入、轉人工模式與逾時恢復
+- [x] 本機測試工具（dry-run）
+- [ ] **LINE Messaging API Channel、取得 Secret／Token**（需人工操作）
+- [ ] 用 cloudflared／ngrok 接上真實 webhook 驗證
+- [ ] Rich Menu（下方固定選單）
 
 ### Phase 3 — 媒合
 - [ ] `inventory` 表（誰有什麼卡、想要什麼卡）
