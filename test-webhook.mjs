@@ -7,7 +7,8 @@
 import crypto from 'node:crypto';
 
 const SECRET = process.env.LINE_CHANNEL_SECRET ?? 'testsecret';
-const URL_ = process.env.WEBHOOK_URL ?? 'http://localhost:3000/callback';
+// wrangler dev 預設埠為 8787（Node 版 server.mjs 是 3000）
+const URL_ = process.env.WEBHOOK_URL ?? 'http://localhost:8787/callback';
 const text = process.argv.slice(2).join(' ') || '1-001';
 
 const body = JSON.stringify({

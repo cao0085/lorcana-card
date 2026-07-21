@@ -7,6 +7,20 @@ data/lorcana.db-wal
 # 翻譯成果請匯出到 translations/ 並進版控 (見 README「翻譯資料的保存」)
 # translations/ 不要 ignore
 
+# D1 匯入用的 SQL，由腳本產生，可重建（translations/*.jsonl 才是真相來源，要進版控）
+data/seed.d1.sql
+data/translations.sql
+
 node_modules/
 .env
 .env.local
+
+# Cloudflare / wrangler
+.dev.vars
+.wrangler/
+worker-configuration.d.ts
+
+# 憑證明文筆記，絕對不可進版控
+line-key-note.md
+*key-note*
+*.secret

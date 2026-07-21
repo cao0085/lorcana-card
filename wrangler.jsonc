@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "lorcana-bot",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-15",
+
+  // D1 資料庫綁定。
+  // database_id 要先跑 `npm run db:create`（= wrangler d1 create lorcana）
+  // 取得後填進來。本機 `--local` 開發不需要 id，deploy 到遠端才需要。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lorcana-cardlist",
+      "database_id": "befbdbf2-3619-4c55-9c80-0571c53b35ba"
+    }
+  ],
+
+  // 觀測用（本機看不到，deploy 後在 dashboard / wrangler tail 看 log）
+  "observability": {
+    "enabled": true
+  }
+
+  // secrets（不寫這裡）：
+  //   本機 -> .dev.vars
+  //   遠端 -> npx wrangler secret put LINE_CHANNEL_SECRET
+  //           npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
+}

@@ -1,277 +1,140 @@
 # Lorcana 繁中查卡 LINE Bot
 
-Disney Lorcana TCG 的繁體中文查卡服務，以 LINE Bot 為載體。
-長期目標包含卡片媒合（配對交換）功能。
+Disney Lorcana TCG 的繁體中文查卡服務，以 LINE Bot 為介面。
+使用者輸入卡號或關鍵字，回傳卡片資訊（Flex 卡片）。
+長期目標包含卡片媒合（配對交換）。
 
-狀態：**Phase 2 — 資料層 + Bot 骨架完成**，翻譯尚未開始。
+執行於 **Cloudflare Worker + D1**，serverless、免維護伺服器。
 
----
+- 線上網址：`https://lorcana-bot.codeing0085.workers.dev`
+- 健康檢查：`https://lorcana-bot.codeing0085.workers.dev/healthz`
 
-## 環境需求
-
-- **Node.js 22+**（用內建的 `node:sqlite`，需 v22.5 以上）
-- 無外部相依套件。目前整個資料層是零 `npm install`。
-
-實測環境：Node v22.21.1 / npm 10.9.4 / Windows 11。
-
-> `node:sqlite` 目前是 experimental，執行時會出現 `ExperimentalWarning`，可忽略。
-> 內建的 SQLite 已編入 **FTS5** 與 **trigram** 分詞器，兩者都已驗證可用。
+> 日常更新、翻譯、部署、疑難排解 → 見 **[MAINTENANCE.md](./MAINTENANCE.md)**
 
 ---
 
-## 快速開始
+## 架構
 
-```bash
-node fetch-cards.mjs      # 下載英文卡牌資料 -> data/allCards.en.json
-node import.mjs           # 建表 + 匯入        -> data/lorcana.db
-node search.mjs 米奇       # CLI 測試查詢
+```
+LINE 使用者
+   │ 傳訊息
+   ▼
+LINE Platform ──webhook(POST /callback)──▶ Cloudflare Worker ──▶ D1 (SQLite)
+   ▲                                          │ 查卡 / 記錄
+   └──────────── reply (Flex 卡片) ◀──────────┘
 ```
 
-`import.mjs` 可重複執行：英文資料會 upsert 覆蓋，**翻譯不受影響**。
+- **Worker**：webhook 進入點、簽章驗證、查卡、組 Flex、reply。無伺服器可維護。
+- **D1**：卡牌資料 + 繁中翻譯 + 使用者狀態 + 對話記錄。
+- **卡圖**：熱連官方 CDN（`api.lorcana.ravensburger.com`），不自存。
 
-### 跑 Bot
+### 資料來源
 
-```bash
-cp .env.example .env      # 填入 LINE 憑證
-node --env-file=.env server.mjs
+[LorcanaJSON](https://lorcanajson.org/) — 開源結構化卡牌資料（僅英/法/德/義，**無中文**）。
+繁中翻譯為本專案自建，這也是專案的切入點（市面無繁中查卡服務）。
+
+目前 **3,226 張卡**，15 系列（`1`–`13` + `Q1`/`Q2`）。
+
+---
+
+## 檔案結構
+
+```
+wrangler.jsonc          Worker 設定（D1 綁定）
+package.json            指令集（見下）
+src/
+  index.js              Worker 進入點：/callback、/healthz、事件處理、轉人工
+  search.js             查卡（卡號精確 + search_blob LIKE）
+  line.js               LINE API：簽章(Web Crypto)、reply/push
+format.mjs              查詢結果 → LINE 訊息（Flex/文字），中英 fallback 在這
+
+schema.d1.sql           D1 結構
+fetch-cards.mjs         下載英文源資料 → data/allCards.en.json
+gen-seed.mjs            allCards.en.json → data/seed.d1.sql（灌卡牌用）
+
+translations/           ★ 翻譯真相來源（進版控）
+  glossary.md           術語對照表（翻譯依據）
+  set-<N>.jsonl         各系列待翻/已翻的效果文字
+export-translations.mjs 產出/更新 translations/set-*.jsonl
+import-translations.mjs translations/*.jsonl → data/translations.sql
+glossary.seed.sql       術語表載入 D1
+
+test-webhook.mjs        本機模擬 LINE 請求（對 wrangler dev）
 ```
 
-沒有憑證也能測（dry-run 不會呼叫真正的 LINE API，只印出要送的訊息）：
+不進版控（gitignore）：`data/*.json`、`data/*.sql`、`.dev.vars`、`.wrangler/`、
+`node_modules/`、`line-key-note.md` 等。
 
-```bash
-# 終端機 1
-DRY_RUN=1 LINE_CHANNEL_SECRET=testsecret LINE_CHANNEL_ACCESS_TOKEN=x node server.mjs
+---
 
-# 終端機 2
-LINE_CHANNEL_SECRET=testsecret node test-webhook.mjs 1-001
-LINE_CHANNEL_SECRET=testsecret node test-webhook.mjs 真人
-```
+## 資料庫重點
 
-健康檢查：`curl localhost:3000/healthz`
-（回傳卡片數、憑證是否設定、本月已用推播則數）
+### 卡號 `card_no`
+
+| 樣式 | 範例 |
+|---|---|
+| `{系列}-{編號}` | `1-001`、`Q1-007` |
+| `{系列}-{促銷碼}-{編號}` | `1-P1-001`、`3-D23-003` |
+
+促銷卡沿用系列碼但另編號，需加促銷碼（P1/P2/P3/P4/C1/C2/D23/PD1）才唯一。
+**`card_no` 非唯一**：`7-P2-026` 為 Moana/Vaiana 同卡異名，查到多筆時讓使用者選。
+真正唯一鍵是 `cards.code`（LorcanaJSON 內部短碼，內部用）。
+
+### 主要表
+
+| 表 | 用途 |
+|---|---|
+| `cards` | 英文原始資料 + `search_blob`（查詢用合併欄） |
+| `card_zh` | 繁中翻譯，**與 cards 分離**，重灌卡牌不影響 |
+| `glossary` | 術語對照 |
+| `users` | 使用者，`mode` 控制 bot／人工 |
+| `messages` | 對話記錄（人工介入看上下文 / 推播額度對帳） |
+
+`card_zh.status`：`pending`（未翻）→ `machine`（機翻）→ `reviewed`（已校對）。
+
+### 查詢
+
+`search.js` 依序：**卡號精確** → **`search_blob` LIKE**。
+不用 FTS——trigram 查不到 2 字中文（如「米奇」），LIKE 全表掃描 3226 筆為毫秒級，一條路涵蓋所有情況。
 
 ---
 
 ## Bot 行為
 
-| 輸入 | 行為 |
+| 輸入 | 回應 |
 |---|---|
-| 卡號（`1-001`、`1-P1-001`） | 精確查詢，回 Flex 卡片 |
-| 關鍵字（`Elsa`） | 模糊查詢；多筆結果回 Carousel（最多 12 張） |
+| 卡號（`1-001`） | Flex 單卡 |
+| 關鍵字（`Elsa`） | Carousel（最多 12 張） |
 | `說明` / `help` / `?` | 使用說明 |
-| `真人` / `人工` / `客服` | 轉人工，bot 停止回應該使用者 |
+| `真人` / `人工` / `客服` | 轉人工，bot 停止回應（逾時 30 分自動恢復） |
 
-轉人工後逾時（預設 30 分鐘）無人處理會**自動恢復自動回覆**，
-避免使用者被永久卡住沒人理。
+### 翻譯如何生效
 
-### 翻譯的接入方式
-
-`format.mjs` 內所有文字都經過 `zhOr(中文, 英文)` 取值。
-**把 `card_zh` 填滿後顯示會自動變中文，`format.mjs` 不需要改。**
-
-`card_zh.status` 也已接上顯示：`machine` 會標註「※ 機器翻譯，尚未校對」，
-`pending` 會標註「※ 此卡尚未翻譯」，避免使用者誤信機翻內容。
-
----
-
-## 檔案
-
-| 檔案 | 用途 |
-|---|---|
-| `schema.sql` | 資料庫結構（卡牌／翻譯／術語／全文索引／使用者／訊息） |
-| `fetch-cards.mjs` | 從 LorcanaJSON 下載英文卡牌資料，並印出欄位統計 |
-| `import.mjs` | 建立 schema、匯入卡牌、重建 FTS 索引 |
-| `db.mjs` | 共用的 SQLite 連線 |
-| `search.mjs` | 查卡核心邏輯；export `search()` 與 `normalizeCardNo()` |
-| `format.mjs` | 查詢結果 → LINE 訊息（Flex／純文字），**中英 fallback 在這裡** |
-| `line.mjs` | LINE API：簽章驗證、reply／push、推播額度統計 |
-| `server.mjs` | Webhook 伺服器 |
-| `test-webhook.mjs` | 本機模擬 LINE 請求（含正確簽章），無憑證也能測 |
-
----
-
-## 資料來源
-
-[**LorcanaJSON**](https://lorcanajson.org/) — 開源結構化卡牌資料。
-
-- 端點：`https://lorcanajson.org/files/current/en/allCards.json`
-- 支援語言：**en / fr / de / it**（英法為完整驗證）
-- **沒有任何中文**，繁中翻譯必須自行建立
-
-目前資料：**3,226 張卡**，15 個系列（`1`–`13` 正規系列 + `Q1`/`Q2`），
-資料格式版本 2.3.4，來源產生日期 2026-07-17。
-
-其他評估過的來源：Lorcana-api.com、Lorcania、inkDecks——皆為純英文。
-中國於 2025-01 推出**簡體中文**官方版（代理商 Saka Saka），
-社群有微信小程式「Lorcana妙妙屋」可查卡，但為簡體且在微信生態內。
-**繁體中文目前沒有任何現成服務**，這是本專案的切入點。
-
----
-
-## 資料庫設計
-
-### 卡號 `card_no`
-
-使用者輸入用的卡號，格式：
-
-| 樣式 | 範例 | 說明 |
-|---|---|---|
-| `{系列}-{編號}` | `1-001`、`Q1-007` | 一般卡 |
-| `{系列}-{促銷碼}-{編號}` | `1-P1-001`、`3-D23-003` | 促銷卡 |
-
-促銷碼有 `P1` `P2` `P3` `P4` `C1` `C2` `D23` `PD1`。
-
-**為什麼需要促銷碼**：促銷卡沿用同一個 `setCode` 但編號另外計，
-單用 `(setCode, number)` 會產生 **149 組衝突**。加入 `promoGrouping`
-後降到 1 組。
-
-**`card_no` 不是唯一鍵**。僅存的衝突是 `7-P2-026`
-（Moana / Vaiana — 同一張卡的歐洲版譯名差異，來源資料本身如此）。
-查到多筆時應讓使用者選，不要假設唯一。
-
-真正的唯一鍵是 `cards.code`（LorcanaJSON 內部短碼，如 `aD`、`j9`），
-但不可讀，僅供內部關聯使用。
-
-`normalizeCardNo()` 會容錯處理使用者輸入：`1-1` → `1-001`。
-
-### 主要資料表
-
-| 表 | 用途 |
-|---|---|
-| `cards` | 英文原始資料，可重新匯入覆蓋 |
-| `card_zh` | 繁中翻譯，**與 `cards` 分離**，重新匯入不會被蓋掉 |
-| `glossary` | 術語對照表，確保翻譯一致性（目前為空） |
-| `cards_fts` | FTS5 全文索引（中英合併，trigram 分詞） |
-| `users` | LINE 使用者，含 `mode` 欄位控制 bot／人工 |
-| `messages` | 對話記錄，人工介入看上下文用；`send_type` 供推播額度對帳 |
-
-`card_zh.status`：`pending`（未翻）→ `machine`（機翻未校對）→ `reviewed`（人工已校對）。
-
----
-
-## 查詢邏輯
-
-`search()` 依序嘗試三種模式：
-
-1. **`card_no`** — 輸入符合卡號格式 → 精確查詢
-2. **`fts`** — 查詢長度 ≥ 3 字元 → FTS5 全文檢索
-3. **`like`** — 其餘情況 → `LIKE '%q%'` 全表掃描
-
-### 為什麼需要 LIKE 這條路
-
-**SQLite 的 trigram 分詞查不到 2 個字元以下的字串。**
-而「米奇」「艾莎」「老鼠」正是使用者最常輸入的形式。
-
-已實測確認：
-
-```
-查 "人魚"   (2字) -> 0 筆   ← trigram 失效
-查 "美人魚" (3字) -> 1 筆
-```
-
-3,226 筆的 `LIKE` 全表掃描實測約 10ms，完全可接受，不需額外索引。
-
-### 已知限制
-
-英文查詢的子字串比對會誤中：查 `ice` 會撞到 `Alice`、`Maleficent`。
-中文不受影響。後續可加排序權重讓完全符合者優先。
-
-實測查詢耗時：**2–10ms**。
-
----
-
-## ⚠️ 翻譯資料的保存
-
-`data/lorcana.db` 已列入 `.gitignore`（8MB，且可重建）。
-但**翻譯成果存在這個 DB 裡**——若只依賴這個檔案，等於翻譯沒有版控也沒有備份。
-
-**動手翻譯前必須先做**：把 `card_zh` 匯出成可版控的文字檔
-（建議 `translations/*.csv` 或 `*.json`，依系列切檔），
-並在 `import.mjs` 之後加一個匯入步驟，讓 DB 可以從該檔完整重建。
-
-流程應為：`翻譯檔（進版控）` → `DB（可拋棄）`，而不是反過來。
+`format.mjs` 全部走 `zhOr(中文, 英文)`：有翻譯用翻譯，沒有退回英文。
+**填 `card_zh` 後顯示自動變中文，不需改 code、不需重新部署**（Worker 即時讀 D1）。
+`status=machine` 會標「※ 機器翻譯，尚未校對」；`pending` 但無效果的卡不顯示提示。
 
 ---
 
 ## 成本
 
-| 項目 | 費用 |
-|---|---|
-| 查卡（reply 回覆） | **NT$0** — reply message 不計入額度 |
-| 主機 | NT$0 起（Render／Cloud Run 免費層足夠） |
-| 網域（自架才需要） | 約 NT$300/年 |
-
-LINE 官方帳號方案（台灣）：
-
-| 方案 | 月費 | 含訊息則數 | 可加購 |
-|---|---|---|---|
-| 輕用量 | NT$0 | 200 | ✗ |
-| 中用量 | NT$800 | 3,000 | ✗ |
-| 高用量 | NT$1,200 | 6,000 | ✓ NT$0.2/則起 |
-
-**只做查卡 → 免費方案完全夠用**（純 reply，不吃額度）。
-
-**做媒合就會吃額度**：媒合通知是非同步的，reply token 早已失效，
-只能用 push message，且按人頭計費。200 則約等於 100 次雙向媒合通知。
-
-省額度做法：**每日彙整一次推播**，把當天所有媒合結果合併成一則訊息。
-
-中用量性價比明顯較差（NT$0.27/則 vs 高用量 NT$0.20/則），
-且不可加購——真要做媒合建議直接上高用量。
+- **查卡（reply）免費**——reply message 不計入 LINE 方案額度。
+- 主機 = Cloudflare 免費額度。純查卡型 bot 用 LINE 輕用量（免費）即可。
+- **媒合會吃 push 額度**（非同步通知只能 push，按人頭計費）——見 Roadmap。
 
 ---
 
-## 架構注意事項
+## Roadmap
 
-**Webhook 必須全程開啟**，人工介入靠 `users.mode` 在程式內控制。
-不要用 LINE 後台的「聊天模式」開關——那是**全域**的，
-一切過去所有使用者的 bot 都會停擺。
-
-```
-訊息進來 → 查 users.mode
-  ├─ 'bot'   → 自動處理（查卡／媒合指令）
-  ├─ 'human' → 不回應，轉發到管理端
-  └─ 逾時    → 自動轉回 'bot'
-```
-
-⚠️ **LINE Notify 已於 2025-03-31 終止服務**，管理端通知不要再用它。
-可行替代：Discord／Telegram webhook，或自建 Web 管理後台。
-
-其他部署要求：webhook 端點必須是 **HTTPS 且為受信任 CA 憑證**（自簽不可），
-開發階段用 cloudflared tunnel 或 ngrok 即可。
-
----
-
-## 待辦
-
-### Phase 1 — 翻譯
-- [ ] 建立 `glossary` 術語表（關鍵字 Shift／Bodyguard／Challenger／Evasive、
-      六色 Amber／Amethyst／Emerald／Ruby／Sapphire／Steel、Lore／Ink／Quest）
-- [ ] 翻譯匯出／匯入機制（見上方「翻譯資料的保存」）
-- [ ] 以 Claude API 批次機翻 3,226 張，狀態標 `machine`
-- [ ] 人工校對，狀態改 `reviewed`
-
-### Phase 2 — Bot
-- [x] Webhook 伺服器 + 簽章驗證
-- [x] Flex Message 卡片版面、多筆結果用 Carousel
-- [x] `users` / `messages` 寫入、轉人工模式與逾時恢復
-- [x] 本機測試工具（dry-run）
-- [ ] **LINE Messaging API Channel、取得 Secret／Token**（需人工操作）
-- [ ] 用 cloudflared／ngrok 接上真實 webhook 驗證
-- [ ] Rich Menu（下方固定選單）
-
-### Phase 3 — 媒合
-- [ ] `inventory` 表（誰有什麼卡、想要什麼卡）
-- [ ] `matches` 表與媒合邏輯
-- [ ] 每日彙整推播（省額度）
-- [ ] Web 管理後台（待處理清單、對話記錄、媒合審核）
+- **Phase 1（進行中）翻譯**：3226 張效果文字繁中化。已建保存機制與術語表，
+  已翻示範 12-001~005。流程見 MAINTENANCE.md。
+- **Phase 2（完成）Bot**：查卡、Flex、轉人工、上線。
+- **Phase 3（未開始）媒合**：`inventory`／`matches` 表、每日彙整推播（省 push 額度）、
+  Web 管理後台。注意媒合會產生 push 費用。
 
 ---
 
 ## 授權注意
 
-Lorcana 為迪士尼 IP，卡牌文字與卡圖均有版權。
-非營利查詢工具通常可接受（Lorcania、inkDecks 皆在運作），
-但若後續媒合功能商業化，需自行評估風險。
-
-**卡圖一律熱連官方 CDN（`api.lorcana.ravensburger.com`），不自行儲存。**
+Lorcana 為迪士尼 IP，卡牌文字與卡圖有版權。非營利查詢工具通常可接受
+（Lorcania、inkDecks 皆運作中），媒合商業化需自行評估。卡圖一律熱連官方 CDN。

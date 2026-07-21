@@ -1,0 +1,37 @@
+-- 術語對照表載入 D1。來源: translations/glossary.md
+-- 套用: wrangler d1 execute lorcana-cardlist --local/--remote --file=./glossary.seed.sql
+DELETE FROM glossary;
+
+INSERT INTO glossary (term_en, term_zh, category) VALUES
+  ('Bodyguard', '護衛', 'keyword'),
+  ('Challenger', '挑戰者', 'keyword'),
+  ('Evasive', '迴避', 'keyword'),
+  ('Reckless', '魯莽', 'keyword'),
+  ('Resist', '抵抗', 'keyword'),
+  ('Rush', '突襲', 'keyword'),
+  ('Shift', '變身', 'keyword'),
+  ('Singer', '歌手', 'keyword'),
+  ('Sing Together', '合唱', 'keyword'),
+  ('Support', '支援', 'keyword'),
+  ('Ward', '守護', 'keyword'),
+  ('Vanish', '消散', 'keyword'),
+  ('character', '角色', 'term'),
+  ('item', '物品', 'term'),
+  ('location', '地點', 'term'),
+  ('action', '行動', 'term'),
+  ('song', '歌曲', 'term'),
+  ('deck', '牌庫', 'term'),
+  ('hand', '手牌', 'term'),
+  ('quest', '探險', 'term'),
+  ('challenge', '挑戰', 'term'),
+  ('ready', '準備', 'term'),
+  ('exert', '橫置', 'term'),
+  ('banish', '消滅', 'term'),
+  ('damage', '傷害', 'term'),
+  ('cost', '費用', 'term'),
+  ('Amber', '琥珀', 'color'),
+  ('Amethyst', '紫水晶', 'color'),
+  ('Emerald', '翡翠', 'color'),
+  ('Ruby', '紅寶石', 'color'),
+  ('Sapphire', '藍寶石', 'color'),
+  ('Steel', '鋼鐵', 'color');
