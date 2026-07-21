@@ -83,8 +83,8 @@ async function handleText(env, userId, text) {
 
   if ((await resolveMode(env, userId)) === 'human') return null;
 
-  const { rows } = await search(env.DB, q);
-  return toMessage(rows);
+  const { rows, total } = await search(env.DB, q);
+  return toMessage(rows, { query: q, total });
 }
 
 async function handleEvent(env, event) {
@@ -115,8 +115,10 @@ async function handleEvent(env, event) {
   if (!message) return;
 
   await reply(event.replyToken, message, env);
+  // message 可能是單一物件或陣列（多筆結果會附一則提示文字）
+  const last = Array.isArray(message) ? message[message.length - 1] : message;
   await logMessage(env, userId, 'out', 'reply',
-    message.type === 'text' ? message.text : message.altText);
+    last.type === 'text' ? last.text : last.altText);
 }
 
 // --- HTTP -------------------------------------------------------

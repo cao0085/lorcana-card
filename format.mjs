@@ -129,12 +129,19 @@ export function toBubble(r) {
 // LINE 限制：carousel 最多 12 個 bubble、altText 最多 400 字
 const MAX_BUBBLES = 12;
 
-/** 把查詢結果轉成一則 LINE 訊息物件 */
-export function toMessage(rows) {
+/**
+ * 把查詢結果轉成 LINE 訊息。
+ * @param {object[]} rows 查詢結果
+ * @param {object}  [opts]
+ * @param {string}  [opts.query] 使用者輸入（放進提示文字）
+ * @param {number}  [opts.total] 去重後的版本總數（> rows.length 時提示還有更多）
+ * @returns 單一訊息物件，或訊息陣列（多筆且有截斷時附一則提示文字）
+ */
+export function toMessage(rows, opts = {}) {
   if (!rows.length) {
     return {
       type: 'text',
-      text: '找不到這張卡片。\n\n可以試試：\n・卡號，例如 1-001\n・卡名關鍵字，例如 Elsa',
+      text: '找不到這張卡片。\n\n可以試試：\n・卡號，例如 1-001\n・英文卡名，例如 Elsa、Mickey Mouse',
     };
   }
 
@@ -147,9 +154,23 @@ export function toMessage(rows) {
   }
 
   const shown = rows.slice(0, MAX_BUBBLES);
-  return {
+  const carousel = {
     type: 'flex',
-    altText: `找到 ${rows.length} 張卡片`.slice(0, 400),
+    altText: `找到 ${opts.total ?? shown.length} 個版本`.slice(0, 400),
     contents: { type: 'carousel', contents: shown.map(toBubble) },
   };
+
+  // 去重後的版本數比顯示的多 → 附一則提示，告知有截斷、可加字縮小
+  const total = opts.total ?? shown.length;
+  if (total > shown.length) {
+    const who = opts.query ? `「${opts.query}」` : '';
+    return [
+      {
+        type: 'text',
+        text: `${who}共 ${total} 個版本，顯示最新 ${shown.length} 個。\n可加上版本關鍵字縮小，例如「Elsa Ice」。`,
+      },
+      carousel,
+    ];
+  }
+  return carousel;
 }
