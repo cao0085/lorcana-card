@@ -110,6 +110,7 @@ CREATE TABLE messages (
   direction    TEXT NOT NULL CHECK (direction IN ('in','out')),
   send_type    TEXT CHECK (send_type IN ('reply','push')),
   text         TEXT,
+  is_memo      INTEGER NOT NULL DEFAULT 0,   -- 1 = 留言模式下的留言，供人工處理
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

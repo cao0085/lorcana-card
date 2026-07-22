@@ -17,7 +17,7 @@ const HELP = [
   '・卡號 — 例如 1-001、1-P1-001',
   '・卡名關鍵字 — 例如 Elsa、Ariel',
   '',
-  '輸入「真人」可轉接人工客服。',
+  '輸入「留言」可轉為留言模式，將訊息交給專人。',
 ].join('\n');
 
 // --- D1 存取 ----------------------------------------------------
@@ -38,19 +38,21 @@ function setMode(env, userId, mode) {
   ).bind(mode, userId).run();
 }
 
-function logMessage(env, userId, direction, sendType, text) {
+// isMemo=1 標記「留言模式下收到的留言」，供人工事後翻閱處理
+function logMessage(env, userId, direction, sendType, text, isMemo = 0) {
   return env.DB.prepare(
-    `INSERT INTO messages (line_user_id, direction, send_type, text) VALUES (?, ?, ?, ?)`
-  ).bind(userId, direction, sendType, text).run();
+    `INSERT INTO messages (line_user_id, direction, send_type, text, is_memo)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(userId, direction, sendType, text, isMemo).run();
 }
 
-/** 取得使用者模式，順便處理轉人工逾時自動恢復 */
+/** 取得使用者模式，順便處理留言模式逾時自動恢復。mode='human' 即留言模式 */
 async function resolveMode(env, userId) {
   const u = await env.DB.prepare(`SELECT mode, mode_since FROM users WHERE line_user_id = ?`)
     .bind(userId).first();
   if (!u || u.mode !== 'human') return u?.mode ?? 'bot';
 
-  const timeout = Number(env.HUMAN_MODE_TIMEOUT_MIN ?? 30);
+  const timeout = Number(env.HUMAN_MODE_TIMEOUT_MIN ?? 10);
   const row = await env.DB.prepare(
     `SELECT datetime(?, '+' || ? || ' minutes') < datetime('now') AS expired`
   ).bind(u.mode_since, timeout).first();
@@ -64,27 +66,54 @@ async function resolveMode(env, userId) {
 
 // --- 訊息處理 ---------------------------------------------------
 
-/** 回傳要回覆的訊息物件；null 表示不回應（已轉人工） */
+const ENTER_MEMO = /^(留言|真人|人工|客服|轉人工)$/;   // 轉入留言模式
+const EXIT_MEMO = /^(查卡|返回)$/;                    // 轉回查卡模式
+
+/**
+ * 處理文字訊息。回傳 { reply, isMemo }：
+ *   reply  — 要回覆的訊息物件（或陣列），null 表示不回應
+ *   isMemo — 這則來訊是否為「留言」（需標記供人工處理）
+ */
 async function handleText(env, userId, text) {
   const q = text.trim();
+  const min = Number(env.HUMAN_MODE_TIMEOUT_MIN ?? 10);
 
   if (/^(help|說明|幫助|\?|？)$/i.test(q)) {
-    return { type: 'text', text: HELP };
+    return { reply: { type: 'text', text: HELP }, isMemo: false };
   }
 
-  if (/^(真人|人工|客服|轉人工)$/.test(q)) {
+  const mode = await resolveMode(env, userId);
+
+  // 已在留言模式
+  if (mode === 'human') {
+    if (EXIT_MEMO.test(q)) {
+      await setMode(env, userId, 'bot');
+      return {
+        reply: { type: 'text', text: '已恢復自動查詢模式，可直接輸入卡號或卡名查詢。' },
+        isMemo: false,
+      };
+    }
+    // 一般訊息即為留言：標記起來、不回應
+    return { reply: null, isMemo: true };
+  }
+
+  // 轉入留言模式（順便抓取顯示名稱，方便人工辨識）
+  if (ENTER_MEMO.test(q)) {
+    const profile = await getProfile(userId, env).catch(() => null);
+    if (profile?.displayName) await upsertUser(env, userId, profile.displayName);
     await setMode(env, userId, 'human');
-    const min = Number(env.HUMAN_MODE_TIMEOUT_MIN ?? 30);
     return {
-      type: 'text',
-      text: `已為您轉接人工客服，稍後會有專人回覆。\n\n若 ${min} 分鐘內無人回應，將自動恢復自動查詢。`,
+      reply: {
+        type: 'text',
+        text: `已為您轉為留言模式，您的訊息將由專人查看並回覆。\n\n${min} 分鐘後將自動恢復自動查詢模式，或輸入「查卡」立即恢復。`,
+      },
+      isMemo: false,
     };
   }
 
-  if ((await resolveMode(env, userId)) === 'human') return null;
-
+  // 一般查卡
   const { rows, total } = await search(env.DB, q);
-  return toMessage(rows, { query: q, total });
+  return { reply: toMessage(rows, { query: q, total }), isMemo: false };
 }
 
 async function handleEvent(env, event) {
@@ -109,10 +138,12 @@ async function handleEvent(env, event) {
 
   const text = event.message.text;
   await upsertUser(env, userId, null);
-  await logMessage(env, userId, 'in', null, text);
 
-  const message = await handleText(env, userId, text);
-  if (!message) return;
+  const { reply: message, isMemo } = await handleText(env, userId, text);
+  // 來訊記錄：留言模式下標記 is_memo=1，供人工事後翻閱
+  await logMessage(env, userId, 'in', null, text, isMemo ? 1 : 0);
+
+  if (!message) return;   // 留言模式：bot 不回應
 
   await reply(event.replyToken, message, env);
   // message 可能是單一物件或陣列（多筆結果會附一則提示文字）

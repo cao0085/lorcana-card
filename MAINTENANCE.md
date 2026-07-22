@@ -144,6 +144,22 @@ LINE_CHANNEL_SECRET=<值> node test-webhook.mjs 1-001
 | 某卡查不到 | `wrangler d1 execute ... --command "SELECT * FROM cards WHERE card_no='X'"` |
 | 改了翻譯沒變 | 有沒有跑 `import-translations.mjs` + `execute --file`；D1 是改 remote 不是 local |
 
+### 留言模式（人工處理）
+
+使用者輸入「留言／真人／人工／客服／轉人工」會進入**留言模式**：bot 停止自動回覆，
+其訊息標記為留言（`messages.is_memo = 1`）供人工事後翻閱。10 分鐘無動作自動恢復，
+或使用者輸入「查卡」立即恢復。
+
+查看待處理留言（含顯示名稱 + 時間）：
+
+```bash
+npx wrangler d1 execute lorcana-cardlist --remote \
+  --command "SELECT u.display_name, m.created_at, m.text FROM messages m JOIN users u ON u.line_user_id = m.line_user_id WHERE m.is_memo = 1 ORDER BY m.created_at DESC LIMIT 20"
+```
+
+> 目前僅記錄留言，**沒有回覆介面**（量小先人工，之後可接定時排程或管理後台）。
+> 逾時分鐘數由 secret `HUMAN_MODE_TIMEOUT_MIN` 控制（未設時預設 10）。
+
 ### 常用查詢
 
 ```bash

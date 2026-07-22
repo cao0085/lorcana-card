@@ -141,7 +141,18 @@ export function toMessage(rows, opts = {}) {
   if (!rows.length) {
     return {
       type: 'text',
-      text: '找不到這張卡片。\n\n可以試試：\n・卡號，例如 1-001\n・英文卡名，例如 Elsa、Mickey Mouse',
+      text: [
+        '找不到這張卡片。',
+        '',
+        '可以這樣查：',
+        '',
+        '🔹 英文卡名',
+        '　卡面下方的名字，如 Elsa、Mickey Mouse',
+        '',
+        '🔹 卡號（卡面左下角）',
+        '　例如卡上印 99/207·EN·13',
+        '　→ 輸入 13-99（EN 後面是系列、斜線前是編號）',
+      ].join('\n'),
     };
   }
 
