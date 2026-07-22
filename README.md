@@ -126,8 +126,9 @@ test-webhook.mjs        本機模擬 LINE 請求（對 wrangler dev）
 
 ## Roadmap
 
-- **Phase 1（進行中）翻譯**：3226 張效果文字繁中化。已建保存機制與術語表，
-  已翻示範 12-001~005。流程見 MAINTENANCE.md。
+- **Phase 1（機翻完成，待校對）翻譯**：15 系列（`1`–`13` + `Q1`/`Q2`）共 2,900 張
+  有效果的卡已全數機翻（`status=machine`），保存機制與術語表已建立。
+  下一步為人工校對（逐張改 `reviewed` 去除機翻提示）。流程見 MAINTENANCE.md。
 - **Phase 2（完成）Bot**：查卡、Flex、轉人工、上線。
 - **Phase 3（未開始）媒合**：`inventory`／`matches` 表、每日彙整推播（省 push 額度）、
   Web 管理後台。注意媒合會產生 push 費用。
