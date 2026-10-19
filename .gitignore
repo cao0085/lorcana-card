@@ -9,6 +9,7 @@ data/lorcana.db-wal
 
 # D1 匯入用的 SQL，由腳本產生，可重建（translations/*.jsonl 才是真相來源，要進版控）
 data/seed.d1.sql
+data/sync-cards.d1.sql
 data/translations.sql
 
 node_modules/

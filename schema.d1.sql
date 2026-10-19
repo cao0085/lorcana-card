@@ -4,7 +4,7 @@
 --   1. 移除 PRAGMA journal_mode/foreign_keys（D1 不適用 session PRAGMA）
 --   2. 移除 FTS5 虛擬表，改用 cards.search_blob 欄位 + LIKE 查詢
 --      理由：trigram 在 D1 支援與否不確定；且「2 字中文」本來就得靠 LIKE；
---            資料僅 3226 筆，LIKE 全表掃描為毫秒級。一條路涵蓋所有情況。
+--            資料僅約 3500 筆，LIKE 全表掃描為毫秒級。一條路涵蓋所有情況。
 --
 -- 套用：wrangler d1 execute lorcana --local --file=./schema.d1.sql
 

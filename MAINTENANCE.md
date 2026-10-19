@@ -89,11 +89,15 @@ LorcanaJSON 更新後，同步英文資料到 D1。**翻譯不受影響**（存�
 ```bash
 node fetch-cards.mjs          # 抓最新英文 → data/allCards.en.json
 node export-translations.mjs  # 補進新卡到 translations/set-*.jsonl（保留既有翻譯）
+node gen-sync.mjs             # 產生非破壞式 cards upsert SQL
+npx wrangler d1 execute lorcana-cardlist --remote --file=./data/sync-cards.d1.sql
 ```
 
-⚠️ **目前灌卡牌的 `gen-seed.mjs` + `schema.d1.sql` 會 DROP TABLE 重建整個 DB，
-會清掉 card_zh 與 users/messages。** 現階段（翻譯剛起步）可接受，做法是重建後
-再重跑翻譯匯入還原。標準重建流程：
+上述同步只更新英文卡牌並替新卡建立 `pending` 翻譯列，不會改動既有翻譯、
+users 或 messages。`gen-seed.mjs` + `schema.d1.sql` 僅供全新資料庫初始化；
+`schema.d1.sql` 會 DROP TABLE，不可用於日常更新。
+
+全新資料庫的初始化流程：
 
 ```bash
 node gen-seed.mjs
@@ -103,10 +107,6 @@ npx wrangler d1 execute lorcana-cardlist --remote --file=./glossary.seed.sql   #
 node import-translations.mjs
 npx wrangler d1 execute lorcana-cardlist --remote --file=./data/translations.sql  # 還原翻譯
 ```
-
-> **待辦**：翻譯量變大或開始有真實 users 後，要把上面改成
-> 「只 upsert cards，不動 card_zh/users/messages」的非破壞流程。
-> 屆時 `schema.d1.sql` 的 `DROP TABLE` 要拆出來只在初次建庫用。
 
 ---
 
@@ -181,6 +181,7 @@ npx wrangler d1 execute lorcana-cardlist --remote \
 | `npm run dev` | 本機 Worker（.dev.vars、本機 D1） |
 | `npm run deploy` | 部署到 Cloudflare |
 | `npm run seed:gen` | allCards.en.json → data/seed.d1.sql |
+| `npm run sync:gen` | allCards.en.json → 非破壞式 cards upsert SQL |
 | `npm run db:local` | 本機建庫 + 灌卡牌 |
 | `npm run db:remote` | 遠端建庫 + 灌卡牌（⚠️ 會 DROP TABLE） |
 | `npm run db:check` | 本機查 1-001 |

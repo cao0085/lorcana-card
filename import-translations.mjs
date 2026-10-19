@@ -1,5 +1,5 @@
 // 讀 translations/*.jsonl，產出 data/translations.sql（UPDATE card_zh）。
-// 只處理 zh 非空的列。card_id 透過 code 對應（來源 allCards.en.json）。
+// 只處理 zh 非空的列。card_id 在 D1 內透過穩定的 code 對應。
 //
 // 這是「翻譯檔(版控) -> D1」的橋。D1 就算被 DROP 重建，
 // 只要重跑本腳本 + wrangler execute 就能還原全部翻譯。
@@ -12,8 +12,7 @@ import { readFile, writeFile, readdir } from 'node:fs/promises';
 const root = new URL('./', import.meta.url);
 const raw = JSON.parse(await readFile(new URL('./data/allCards.en.json', root), 'utf8'));
 
-// code -> card id
-const idByCode = new Map(raw.cards.map((c) => [c.code, c.id]));
+const sourceCodes = new Set(raw.cards.map((c) => c.code));
 
 const q = (v) => `'${String(v).replace(/'/g, "''")}'`;
 
@@ -29,12 +28,11 @@ for (const f of files.sort()) {
     if (!line.trim()) continue;
     const o = JSON.parse(line);
     if (!o.zh || !o.zh.trim()) { skipped++; continue; }
-    const id = idByCode.get(o.code);
-    if (id === undefined) { console.warn(`找不到 code=${o.code} (${o.card_no})`); missing++; continue; }
+    if (!sourceCodes.has(o.code)) { console.warn(`找不到 code=${o.code} (${o.card_no})`); missing++; continue; }
     const status = ['machine', 'reviewed'].includes(o.status) ? o.status : 'machine';
     stmts.push(
       `UPDATE card_zh SET text_zh=${q(o.zh)}, status=${q(status)}, ` +
-      `updated_at=datetime('now') WHERE card_id=${id};`
+      `updated_at=datetime('now') WHERE card_id=(SELECT id FROM cards WHERE code=${q(o.code)});`
     );
     filled++;
   }

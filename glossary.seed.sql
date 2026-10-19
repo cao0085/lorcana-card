@@ -3,6 +3,8 @@
 DELETE FROM glossary;
 
 INSERT INTO glossary (term_en, term_zh, category) VALUES
+  ('Adventurous', '冒險', 'keyword'),
+  ('Alert', '警戒', 'keyword'),
   ('Bodyguard', '護衛', 'keyword'),
   ('Challenger', '挑戰者', 'keyword'),
   ('Evasive', '迴避', 'keyword'),
@@ -29,6 +31,7 @@ INSERT INTO glossary (term_en, term_zh, category) VALUES
   ('banish', '消滅', 'term'),
   ('damage', '傷害', 'term'),
   ('cost', '費用', 'term'),
+  ('ink drop', '墨滴', 'term'),
   ('Amber', '琥珀', 'color'),
   ('Amethyst', '紫水晶', 'color'),
   ('Emerald', '翡翠', 'color'),

@@ -1,6 +1,6 @@
 // 從 LorcanaJSON 抓取完整英文卡牌資料，存成本地 JSON。
 // 用法: node fetch-cards.mjs
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 const SOURCE = 'https://lorcanajson.org/files/current/en/allCards.json';
 const OUT = new URL('./data/allCards.en.json', import.meta.url);
@@ -10,6 +10,7 @@ const res = await fetch(SOURCE);
 if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
 const json = await res.json();
+await mkdir(new URL('./data/', import.meta.url), { recursive: true });
 await writeFile(OUT, JSON.stringify(json, null, 2), 'utf8');
 
 const cards = json.cards ?? [];

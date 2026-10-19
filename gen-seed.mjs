@@ -7,7 +7,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 const raw = JSON.parse(
   await readFile(new URL('./data/allCards.en.json', import.meta.url), 'utf8')
 );
-const cards = raw.cards ?? [];
+const sourceCards = raw.cards ?? [];
+const cards = sourceCards.filter((card) => Number.isInteger(card.number));
+const skipped = sourceCards.length - cards.length;
 
 // SQL 字串字面值跳脫：單引號變兩個單引號，null → NULL
 const q = (v) => {
@@ -71,6 +73,7 @@ const outPath = new URL('./data/seed.d1.sql', import.meta.url);
 await writeFile(outPath, out.join('\n'), 'utf8');
 
 console.log(`已產生 seed：${cards.length} 張卡`);
+if (skipped) console.log(`  略過 ${skipped} 張無收藏編號的特殊卡`);
 console.log(`  cards INSERT 批次   ${Math.ceil(cards.length / BATCH)}`);
 console.log(`  card_zh INSERT 批次 ${Math.ceil(cards.length / BATCH)}`);
 console.log(`  輸出 -> data/seed.d1.sql`);

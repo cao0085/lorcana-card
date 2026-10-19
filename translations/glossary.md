@@ -8,6 +8,8 @@
 | 英文 | 繁中 | 備註 |
 |---|---|---|
 | Bodyguard | 護衛 | |
+| Adventurous | 冒險 | 不能挑戰，若有能力必須探險 |
+| Alert | 警戒 | 可如同具有迴避般挑戰 |
 | Challenger +N | 挑戰者 +N | |
 | Evasive | 迴避 | 只有具迴避的角色能挑戰它 |
 | Reckless | 魯莽 | 不能停留，必須挑戰 |
@@ -45,6 +47,7 @@
 | the top / bottom of your deck | 你牌庫頂 / 牌庫底 |
 | reveal | 展示 |
 | into your hand | 加入手牌 |
+| ink drop | 墨滴 |
 | for the rest of this turn | 本回合剩餘時間內 |
 | at the start of their next turn | 在他們的下個回合開始時 |
 | chosen character | 指定角色 |

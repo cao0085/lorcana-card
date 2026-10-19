@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "seed:gen": "node gen-seed.mjs",
+    "sync:gen": "node gen-sync.mjs",
     "db:create": "wrangler d1 create lorcana",
     "db:local": "wrangler d1 execute lorcana --local --file=./schema.d1.sql && wrangler d1 execute lorcana --local --file=./data/seed.d1.sql",
     "db:remote": "wrangler d1 execute lorcana --remote --file=./schema.d1.sql && wrangler d1 execute lorcana --remote --file=./data/seed.d1.sql",

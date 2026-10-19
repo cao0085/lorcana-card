@@ -33,7 +33,7 @@ LINE Platform ──webhook(POST /callback)──▶ Cloudflare Worker ──▶
 [LorcanaJSON](https://lorcanajson.org/) — 開源結構化卡牌資料（僅英/法/德/義，**無中文**）。
 繁中翻譯為本專案自建，這也是專案的切入點（市面無繁中查卡服務）。
 
-目前 **3,226 張卡**，15 系列（`1`–`13` + `Q1`/`Q2`）。
+目前上游共 **3,556 筆卡牌資料**，17 系列（`1`–`14` + `Q1`/`Q2`/`Q3`）。
 
 ---
 
@@ -51,6 +51,7 @@ format.mjs              查詢結果 → LINE 訊息（Flex/文字），中英 f
 schema.d1.sql           D1 結構
 fetch-cards.mjs         下載英文源資料 → data/allCards.en.json
 gen-seed.mjs            allCards.en.json → data/seed.d1.sql（灌卡牌用）
+gen-sync.mjs            allCards.en.json → 非破壞式 cards upsert SQL（日常更新用）
 
 translations/           ★ 翻譯真相來源（進版控）
   glossary.md           術語對照表（翻譯依據）
@@ -126,9 +127,8 @@ test-webhook.mjs        本機模擬 LINE 請求（對 wrangler dev）
 
 ## Roadmap
 
-- **Phase 1（機翻完成，待校對）翻譯**：15 系列（`1`–`13` + `Q1`/`Q2`）共 2,900 張
-  有效果的卡已全數機翻（`status=machine`），保存機制與術語表已建立。
-  下一步為人工校對（逐張改 `reviewed` 去除機翻提示）。流程見 MAINTENANCE.md。
+- **Phase 1（機翻完成，待校對）翻譯**：`1`–`14` + `Q1`/`Q2` 共 3,138 張
+  有效果的卡已機翻（`status=machine`）。下一步為人工校對；流程見 MAINTENANCE.md。
 - **Phase 2（完成）Bot**：查卡、Flex、轉人工、上線。
 - **Phase 3（未開始）媒合**：`inventory`／`matches` 表、每日彙整推播（省 push 額度）、
   Web 管理後台。注意媒合會產生 push 費用。

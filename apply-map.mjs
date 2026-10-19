@@ -10,10 +10,18 @@ const { default: map } = await import(new URL(`./translations-data/set-${set}.zh
 const jsonlPath = new URL(`./translations/set-${set}.jsonl`, root);
 const lines = (await readFile(jsonlPath, 'utf8')).split('\n').filter((l) => l.trim());
 
+// 同系列重印卡常有完全相同的英文效果；對照表只需翻一次，其餘自動沿用。
+const zhByEnglish = new Map();
+for (const line of lines) {
+  const o = JSON.parse(line);
+  const zh = map[o.card_no];
+  if (zh && o.en) zhByEnglish.set(o.en, zh);
+}
+
 let filled = 0, missing = 0;
 const out = lines.map((line) => {
   const o = JSON.parse(line);
-  const zh = map[o.card_no];
+  const zh = map[o.card_no] ?? zhByEnglish.get(o.en);
   if (zh && zh.trim()) { o.zh = zh; o.status = 'machine'; filled++; }
   else if (!o.zh) missing++;
   return JSON.stringify(o);
